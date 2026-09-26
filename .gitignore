@@ -7,3 +7,4 @@ __pycache__/
 .env
 *.egg-info/
 .pytest_cache/
+artifacts/scored_test_parts/

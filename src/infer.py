@@ -1,6 +1,8 @@
 """Inference: block -> features -> score, in batches of S2/S3 queries."""
 import json
 import time
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import Iterable, Optional
 
 import joblib
@@ -29,7 +31,8 @@ def run_inference(split: str = "test", topk: int = config.BLOCKING_TOPK,
                   max_queries: Optional[int] = None,
                   exclude_query_ids: Optional[Iterable[str]] = None,
                   keep_per_query: int = 5,
-                  random_seed: int = config.RANDOM_SEED) -> pd.DataFrame:
+                  random_seed: int = config.RANDOM_SEED,
+                  checkpoint_dir: Optional[Path] = None) -> pd.DataFrame:
     """Scored candidate pairs: query_entity_id, candidate_s1_id, score, query_country,
     f_addr_empty_q (the decision engine uses the last one).
 
@@ -39,6 +42,12 @@ def run_inference(split: str = "test", topk: int = config.BLOCKING_TOPK,
     topk candidates for ~10M queries would be ~1B rows; decisions only ever use
     each query's best candidate.
     threshold is only reported here; decisions happen in decision_engine.
+    checkpoint_dir: save each batch's result there and reuse saved batches on a
+    rerun (the query order is deterministic when max_queries is None).
+
+    Blocking of the next batch runs in a background thread while the current
+    batch is scored: blocking is pure Python (GIL-bound, so threads cannot split
+    it), but feature computation (rapidfuzz) and LightGBM release the GIL.
     """
     t0 = time.time()
     if threshold is None:
@@ -61,22 +70,44 @@ def run_inference(split: str = "test", topk: int = config.BLOCKING_TOPK,
     model = joblib.load(MODEL_FILE)
     features = get_feature_names()
 
+    if checkpoint_dir is not None:
+        checkpoint_dir = Path(checkpoint_dir)
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
+
+    def part_path(b):
+        return None if checkpoint_dir is None else checkpoint_dir / f"part_{b:05d}.parquet"
+
+    def block(b):
+        if part_path(b) is not None and part_path(b).exists():
+            return None
+        start = (b - 1) * batch_size
+        return block_queries(s2s3_df.iloc[start:start + batch_size], indexes, topk)
+
     results, n_pairs = [], 0
     n_batches = (len(s2s3_df) + batch_size - 1) // batch_size
-    for b, start in enumerate(range(0, len(s2s3_df), batch_size), 1):
-        batch = s2s3_df.iloc[start:start + batch_size]
-        pairs = block_queries(batch, indexes, topk)
-        if pairs.empty:
-            continue
-        feats = compute_features_batch(pairs, df)
-        feats["score"] = model.predict_proba(feats[features])[:, 1]
-        feats = (feats.sort_values(["query_entity_id", "score"], ascending=[True, False])
-                      .groupby("query_entity_id", sort=False).head(keep_per_query))
-        results.append(feats[OUT_COLS].reset_index(drop=True))
-        n_pairs += len(pairs)
-        if b == 1 or b % 10 == 0 or b == n_batches:
-            print(f"[infer] batch {b}/{n_batches}  pairs scored so far: {n_pairs:,}  "
-                  f"elapsed: {time.time() - t0:.0f}s", flush=True)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(block, 1) if n_batches else None
+        for b in range(1, n_batches + 1):
+            pairs = future.result()
+            future = pool.submit(block, b + 1) if b < n_batches else None
+            if pairs is None:  # checkpointed on an earlier run
+                results.append(pd.read_parquet(part_path(b)))
+                continue
+            if pairs.empty:
+                part = pd.DataFrame(columns=OUT_COLS)
+            else:
+                feats = compute_features_batch(pairs, df)
+                feats["score"] = model.predict_proba(feats[features])[:, 1]
+                feats = (feats.sort_values(["query_entity_id", "score"], ascending=[True, False])
+                              .groupby("query_entity_id", sort=False).head(keep_per_query))
+                part = feats[OUT_COLS].reset_index(drop=True)
+            if part_path(b) is not None:
+                part.to_parquet(part_path(b), index=False)
+            results.append(part)
+            n_pairs += len(pairs)
+            if b == 1 or b % 10 == 0 or b == n_batches:
+                print(f"[infer] batch {b}/{n_batches}  pairs scored so far: {n_pairs:,}  "
+                      f"elapsed: {time.time() - t0:.0f}s", flush=True)
 
     scored = pd.concat(results, ignore_index=True) if results else pd.DataFrame(columns=OUT_COLS)
     # All queries run, including those with no candidates (they still count against recall).
