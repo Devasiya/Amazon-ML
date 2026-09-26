@@ -1,0 +1,66 @@
+{
+  "record_counts": {
+    "source1": 2206821,
+    "source2": 5034616,
+    "source3": 5285603,
+    "total": 12527040
+  },
+  "countries": {
+    "source1": {
+      "n_unique": 2,
+      "distribution": {
+        "US": 1323633,
+        "India": 883188
+      }
+    },
+    "source2": {
+      "n_unique": 2,
+      "distribution": {
+        "US": 3016817,
+        "India": 2017799
+      }
+    },
+    "source3": {
+      "n_unique": 2,
+      "distribution": {
+        "US": 3170056,
+        "India": 2115547
+      }
+    }
+  },
+  "empty_rates": {
+    "source1": {
+      "business_name": 0.0,
+      "business_address": 0.0,
+      "country": 0.0
+    },
+    "source2": {
+      "business_name": 0.0,
+      "business_address": 0.033561,
+      "country": 0.0
+    },
+    "source3": {
+      "business_name": 0.0,
+      "business_address": 0.033282,
+      "country": 0.0
+    }
+  },
+  "ground_truth": {
+    "total_s1_entities": 2206821,
+    "singletons": 123247,
+    "singleton_rate": 0.055848,
+    "matched_groups": 2083574,
+    "avg_matches_per_group": 3.666,
+    "avg_group_size_incl_s1": 4.666,
+    "max_matches_per_group": 11,
+    "total_match_pairs": 7638365,
+    "gt_s1_ids_not_in_source1": 0,
+    "source1_ids_not_in_gt": 0
+  },
+  "cross_country_check": {
+    "pairs_checked": 7638365,
+    "match_ids_not_found_in_sources": 0,
+    "cross_country_pairs": 0,
+    "examples": []
+  }
+}

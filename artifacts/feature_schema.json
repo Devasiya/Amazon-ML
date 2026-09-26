@@ -1,0 +1,25 @@
+{
+  "features": [
+    "f_name_exact",
+    "f_name_ratio",
+    "f_name_partial",
+    "f_name_token_sort",
+    "f_name_token_set",
+    "f_name_jaro",
+    "f_token_jaccard",
+    "f_token_overlap_count",
+    "f_token_q_in_s1",
+    "f_token_s1_in_q",
+    "f_addr_ratio",
+    "f_addr_token_set",
+    "f_addr_empty_q",
+    "f_addr_empty_s1",
+    "f_addr_both_empty",
+    "f_name_len_diff",
+    "f_name_len_ratio",
+    "f_source_q",
+    "f_n_keys_shared"
+  ],
+  "n_features": 19,
+  "model_path": "models/lgbm_model.pkl"
+}
