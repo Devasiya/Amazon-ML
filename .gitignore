@@ -1,0 +1,9 @@
+artifacts/*.parquet
+artifacts/*.npz
+models/*.pkl
+data/
+__pycache__/
+*.pyc
+.env
+*.egg-info/
+.pytest_cache/
